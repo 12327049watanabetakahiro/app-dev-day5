@@ -135,6 +135,25 @@
             width: 0;
             transition: width 0.5s ease-out;
         }
+
+        /* ハイライト用のスタイル */
+        .result-item.highlight {
+            background-color: #fffde7;
+            border: 1px solid #f1c40f;
+            border-radius: var(--border-radius);
+            padding: 8px;
+            margin-left: -8px;
+            margin-right: -8px;
+        }
+
+        .result-item.highlight .progress-bar-fill {
+            background-color: #f1c40f;
+        }
+
+        .result-item.highlight .result-label {
+            font-weight: bold;
+            color: #d4ac0d;
+        }
     </style>
 </head>
 <body>
@@ -189,56 +208,81 @@
             tennis: 'テニス'
         };
 
-        // 初期データの取得 (localStorage)
-        let votes = JSON.parse(localStorage.getItem('sportsVotes')) || {
-            soccer: 0,
-            baseball: 0,
-            basketball: 0,
-            tennis: 0
-        };
-
         const voteForm = document.getElementById('vote-form');
         const resultsList = document.getElementById('results-list');
 
-        // 結果の表示更新
-        function updateResults() {
-            const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
-            resultsList.innerHTML = '';
+        // 結果の表示更新 (GET /votes)
+        async function updateResults() {
+            try {
+                const response = await fetch('/votes');
+                if (!response.ok) throw new Error('取得失敗');
+                const data = await response.json();
+                
+                const votes = {};
+                data.forEach(item => {
+                    votes[item.option] = item.count;
+                });
 
-            for (const [key, label] of Object.entries(sports)) {
-                const count = votes[key];
-                const percentage = totalVotes === 0 ? 0 : Math.round((count / totalVotes) * 100);
+                const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
+                const maxVotes = Math.max(...Object.values(votes));
+                resultsList.innerHTML = '';
 
-                const resultItem = document.createElement('div');
-                resultItem.className = 'result-item';
-                resultItem.innerHTML = `
-                    <div class="result-label">
-                        <span>${label}</span>
-                        <span>${count} 票 (${percentage}%)</span>
-                    </div>
-                    <div class="progress-bar-bg">
-                        <div class="progress-bar-fill" style="width: ${percentage}%"></div>
-                    </div>
-                `;
-                resultsList.appendChild(resultItem);
+                for (const [key, label] of Object.entries(sports)) {
+                    const count = votes[key] || 0;
+                    const percentage = totalVotes === 0 ? 0 : Math.round((count / totalVotes) * 100);
+                    
+                    // 最大得票かつ1票以上ある場合にハイライト
+                    const isMax = count === maxVotes && maxVotes > 0;
+                    const highlightClass = isMax ? 'highlight' : '';
+
+                    const resultItem = document.createElement('div');
+                    resultItem.className = `result-item ${highlightClass}`;
+                    resultItem.innerHTML = `
+                        <div class="result-label">
+                            <span>${label}${isMax ? ' 👑' : ''}</span>
+                            <span>${count} 票 (${percentage}%)</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width: ${percentage}%"></div>
+                        </div>
+                    `;
+                    resultsList.appendChild(resultItem);
+                }
+            } catch (err) {
+                console.error('データの取得に失敗しました:', err);
             }
         }
 
-        // フォーム送信時の処理
-        voteForm.addEventListener('submit', (e) => {
+        // 投票の送信 (POST /vote)
+        voteForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const selectedSport = voteForm.sport.value;
             
             if (selectedSport) {
-                votes[selectedSport]++;
-                localStorage.setItem('sportsVotes', JSON.stringify(votes));
-                updateResults();
-                voteForm.reset();
-                alert('投票ありがとうございます！');
+                try {
+                    const response = await fetch('/vote', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ option: selectedSport })
+                    });
+
+                    if (response.ok) {
+                        updateResults(); // 成功したら結果を更新
+                        voteForm.reset();
+                        alert('投票ありがとうございます！');
+                    } else {
+                        throw new Error('投票失敗');
+                    }
+                } catch (err) {
+                    console.error('投票に失敗しました:', err);
+                    alert('エラーが発生しました。');
+                }
             }
         });
 
-        // 初回読み込み時に結果を表示
+        // ページ読み込み時に結果を表示
         updateResults();
     </script>
 </body>
