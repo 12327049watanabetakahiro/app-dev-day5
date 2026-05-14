@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>好きなスポーツ投票</title>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --border-radius: 8px;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        main {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 500px;
+            margin: 1rem;
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            margin-bottom: 2rem;
+        }
+
+        fieldset {
+            border: none;
+            padding: 0;
+            margin-bottom: 1.5rem;
+        }
+
+        legend {
+            font-weight: bold;
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .option {
+            margin-bottom: 0.8rem;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .option:hover {
+            background-color: #f0f8ff;
+        }
+
+        .option input {
+            margin-right: 10px;
+        }
+
+        .option label {
+            cursor: pointer;
+            flex-grow: 1;
+        }
+
+        button {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: var(--border-radius);
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        #results-section {
+            margin-top: 2.5rem;
+            padding-top: 1.5rem;
+            border-top: 2px solid var(--bg-color);
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+
+        #results-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .result-item {
+            margin-bottom: 1rem;
+        }
+
+        .result-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.3rem;
+            font-size: 0.9rem;
+        }
+
+        .progress-bar-bg {
+            background-color: #eee;
+            border-radius: 10px;
+            height: 12px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            background-color: var(--primary-color);
+            height: 100%;
+            width: 0;
+            transition: width 0.5s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>好きなスポーツ投票</h1>
+
+        <!-- 投票セクション -->
+        <section id="voting-section">
+            <form id="vote-form">
+                <fieldset>
+                    <legend>好きなスポーツを一つ選んでください：</legend>
+                    
+                    <div class="option">
+                        <input type="radio" id="soccer" name="sport" value="soccer" required>
+                        <label for="soccer">サッカー</label>
+                    </div>
+
+                    <div class="option">
+                        <input type="radio" id="baseball" name="sport" value="baseball">
+                        <label for="baseball">野球</label>
+                    </div>
+
+                    <div class="option">
+                        <input type="radio" id="basketball" name="sport" value="basketball">
+                        <label for="basketball">バスケットボール</label>
+                    </div>
+
+                    <div class="option">
+                        <input type="radio" id="tennis" name="sport" value="tennis">
+                        <label for="tennis">テニス</label>
+                    </div>
+                </fieldset>
+
+                <button type="submit">投票する</button>
+            </form>
+        </section>
+
+        <!-- 結果表示セクション -->
+        <section id="results-section">
+            <h2>現在の投票結果</h2>
+            <div id="results-list">
+                <!-- ここに JavaScript で結果を動的に挿入する -->
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const sports = {
+            soccer: 'サッカー',
+            baseball: '野球',
+            basketball: 'バスケットボール',
+            tennis: 'テニス'
+        };
+
+        // 初期データの取得 (localStorage)
+        let votes = JSON.parse(localStorage.getItem('sportsVotes')) || {
+            soccer: 0,
+            baseball: 0,
+            basketball: 0,
+            tennis: 0
+        };
+
+        const voteForm = document.getElementById('vote-form');
+        const resultsList = document.getElementById('results-list');
+
+        // 結果の表示更新
+        function updateResults() {
+            const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
+            resultsList.innerHTML = '';
+
+            for (const [key, label] of Object.entries(sports)) {
+                const count = votes[key];
+                const percentage = totalVotes === 0 ? 0 : Math.round((count / totalVotes) * 100);
+
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.innerHTML = `
+                    <div class="result-label">
+                        <span>${label}</span>
+                        <span>${count} 票 (${percentage}%)</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+                resultsList.appendChild(resultItem);
+            }
+        }
+
+        // フォーム送信時の処理
+        voteForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const selectedSport = voteForm.sport.value;
+            
+            if (selectedSport) {
+                votes[selectedSport]++;
+                localStorage.setItem('sportsVotes', JSON.stringify(votes));
+                updateResults();
+                voteForm.reset();
+                alert('投票ありがとうございます！');
+            }
+        });
+
+        // 初回読み込み時に結果を表示
+        updateResults();
+    </script>
+</body>
+</html>
