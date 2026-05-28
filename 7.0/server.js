@@ -1,11 +1,19 @@
+require('dotenv').config();
 const express = require('express');
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 
 const app = express();
-const db = new Database('kyoto.db');
+
+// PostgreSQL接続設定
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Supabaseなどのホスト環境で必要
+  }
+});
 
 // アップロード先フォルダの作成
 const uploadDir = path.join(__dirname, 'uploads');
@@ -23,50 +31,37 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// テーブルの自動作成
-db.prepare(`
-  CREATE TABLE IF NOT EXISTS posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    comment TEXT NOT NULL,
-    likes INTEGER DEFAULT 0,
-    tags TEXT,
-    lat REAL,
-    lng REAL,
-    image_url TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`).run();
-
-// 既存のテーブルに image_url カラムがない場合の追加処理
-try {
-  db.prepare('ALTER TABLE posts ADD COLUMN image_url TEXT').run();
-} catch (e) {}
-
-// 既存のテーブルに lat/lng カラムがない場合の追加処理
-try {
-  db.prepare('ALTER TABLE posts ADD COLUMN lat REAL').run();
-  db.prepare('ALTER TABLE posts ADD COLUMN lng REAL').run();
-} catch (e) {}
-
-// 既存のテーブルに tags カラムがない場合の追加処理
-try {
-  db.prepare('ALTER TABLE posts ADD COLUMN tags TEXT').run();
-} catch (e) {}
-
-// 既存のテーブルに likes カラムがない場合の追加処理
-try {
-  db.prepare('ALTER TABLE posts ADD COLUMN likes INTEGER DEFAULT 0').run();
-} catch (e) {}
+// テーブルの自動作成（非同期）
+async function initDb() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS posts (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        comment TEXT NOT NULL,
+        likes INTEGER DEFAULT 0,
+        tags TEXT,
+        lat REAL,
+        lng REAL,
+        image_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Database initialized');
+  } catch (err) {
+    console.error('Database initialization error:', err);
+  }
+}
+initDb();
 
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 投稿一覧の取得
-app.get('/posts', (req, res) => {
+app.get('/posts', async (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM posts ORDER BY created_at DESC').all();
+    const { rows } = await pool.query('SELECT * FROM posts ORDER BY created_at DESC');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -74,12 +69,14 @@ app.get('/posts', (req, res) => {
 });
 
 // 投稿の更新
-app.put('/post/:id', (req, res) => {
+app.put('/post/:id', async (req, res) => {
   const { id } = req.params;
   const { name, comment, tags } = req.body;
   try {
-    const stmt = db.prepare('UPDATE posts SET name = ?, comment = ?, tags = ? WHERE id = ?');
-    stmt.run(name, comment, tags, id);
+    await pool.query(
+      'UPDATE posts SET name = $1, comment = $2, tags = $3 WHERE id = $4',
+      [name, comment, tags, id]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -87,11 +84,13 @@ app.put('/post/:id', (req, res) => {
 });
 
 // 投稿の削除
-app.delete('/post/:id', (req, res) => {
+app.delete('/post/:id', async (req, res) => {
   const { id } = req.params;
   try {
     // 画像パスを取得してファイルを削除
-    const post = db.prepare('SELECT image_url FROM posts WHERE id = ?').get(id);
+    const { rows } = await pool.query('SELECT image_url FROM posts WHERE id = $1', [id]);
+    const post = rows[0];
+    
     if (post && post.image_url) {
       const filePath = path.join(__dirname, post.image_url);
       if (fs.existsSync(filePath)) {
@@ -99,7 +98,7 @@ app.delete('/post/:id', (req, res) => {
       }
     }
 
-    db.prepare('DELETE FROM posts WHERE id = ?').run(id);
+    await pool.query('DELETE FROM posts WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -107,14 +106,12 @@ app.delete('/post/:id', (req, res) => {
 });
 
 // いいねの追加
-app.post('/post/:id/like', (req, res) => {
+app.post('/post/:id/like', async (req, res) => {
   const { id } = req.params;
   try {
-    const stmt = db.prepare('UPDATE posts SET likes = likes + 1 WHERE id = ?');
-    const result = stmt.run(id);
-    if (result.changes > 0) {
-      const updated = db.prepare('SELECT likes FROM posts WHERE id = ?').get(id);
-      res.json({ success: true, likes: updated.likes });
+    const result = await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1 RETURNING likes', [id]);
+    if (result.rowCount > 0) {
+      res.json({ success: true, likes: result.rows[0].likes });
     } else {
       res.status(404).json({ error: 'Post not found' });
     }
@@ -124,7 +121,7 @@ app.post('/post/:id/like', (req, res) => {
 });
 
 // 新規投稿
-app.post('/post', upload.single('image'), (req, res) => {
+app.post('/post', upload.single('image'), async (req, res) => {
   const { name, comment, tags, lat, lng } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
@@ -133,15 +130,17 @@ app.post('/post', upload.single('image'), (req, res) => {
   }
 
   try {
-    const stmt = db.prepare('INSERT INTO posts (name, comment, tags, lat, lng, image_url) VALUES (?, ?, ?, ?, ?, ?)');
-    stmt.run(name, comment, tags || '', lat || null, lng || null, imageUrl);
+    await pool.query(
+      'INSERT INTO posts (name, comment, tags, lat, lng, image_url) VALUES ($1, $2, $3, $4, $5, $6)',
+      [name, comment, tags || '', lat || null, lng || null, imageUrl]
+    );
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Kyoto app running at http://localhost:${PORT}`);
 });
