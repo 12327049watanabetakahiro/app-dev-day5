@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>京都の好きな居場所</title>
+    <style>
+        :root {
+            --primary-color: #e67e22;
+            --bg-color: #fdfaf6;
+            --text-color: #4a4a4a;
+            --accent-color: #d35400;
+        }
+
+        body {
+            font-family: 'Sawarabi Mincho', serif, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            color: var(--accent-color);
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 10px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+        }
+
+        form {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            height: 80px;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 1rem;
+        }
+
+        button:hover {
+            background-color: var(--accent-color);
+        }
+
+        .post-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            border-left: 5px solid var(--primary-color);
+        }
+
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .post-name {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .post-date {
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        .post-comment {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>京都の好きな居場所</h1>
+        <p>あなたのお気に入りの場所を教えてください</p>
+    </header>
+
+    <div class="container">
+        <form id="post-form">
+            <div class="form-group">
+                <label for="name">場所の名前</label>
+                <input type="text" id="name" name="name" placeholder="例：鴨川のほとり" required>
+            </div>
+            <div class="form-group">
+                <label for="comment">コメント</label>
+                <textarea id="comment" name="comment" placeholder="例：夕暮れ時に座るのが最高です。" required></textarea>
+            </div>
+            <button type="submit">投稿する</button>
+        </form>
+
+        <div id="posts-list">
+            <!-- 投稿がここに表示されます -->
+        </div>
+    </div>
+
+    <script>
+        const postForm = document.getElementById('post-form');
+        const postsList = document.getElementById('posts-list');
+
+        // 投稿一覧を取得して表示
+        async function fetchPosts() {
+            try {
+                const response = await fetch('/posts');
+                const posts = await response.json();
+                
+                postsList.innerHTML = '';
+                posts.forEach(post => {
+                    const card = document.createElement('div');
+                    card.className = 'post-card';
+                    
+                    const date = new Date(post.created_at).toLocaleString('ja-JP');
+                    
+                    card.innerHTML = `
+                        <div class="post-header">
+                            <span class="post-name">${escapeHtml(post.name)}</span>
+                            <span class="post-date">${date}</span>
+                        </div>
+                        <div class="post-comment">${escapeHtml(post.comment)}</div>
+                    `;
+                    postsList.appendChild(card);
+                });
+            } catch (err) {
+                console.error('エラー:', err);
+            }
+        }
+
+        // 投稿を送信
+        postForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = postForm.name.value;
+            const comment = postForm.comment.value;
+
+            try {
+                const response = await fetch('/post', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, comment })
+                });
+
+                if (response.ok) {
+                    postForm.reset();
+                    fetchPosts();
+                }
+            } catch (err) {
+                console.error('エラー:', err);
+                alert('投稿に失敗しました。');
+            }
+        });
+
+        // XSS対策用エスケープ関数
+        function escapeHtml(str) {
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // 初期読み込み
+        fetchPosts();
+    </script>
+</body>
+</html>
