@@ -1,5 +1,9 @@
 # Dependency directories
 node_modules/
+.npm-cache/
+
+# User uploads
+uploads/
 
 # SQLite databases
 *.sqlite

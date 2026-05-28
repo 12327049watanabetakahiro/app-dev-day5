@@ -4,115 +4,397 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>京都の好きな居場所</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <style>
         :root {
-            --primary-color: #e67e22;
-            --bg-color: #fdfaf6;
-            --text-color: #4a4a4a;
-            --accent-color: #d35400;
+            --bg-color: #0c1428; /* 深い紺色（夜空） */
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-color: #e0e0e0;
+            --accent-color: #f39c12; /* 灯籠の灯りのようなオレンジ */
+            --accent-glow: #e67e22;
+            --border-color: rgba(243, 156, 18, 0.3);
         }
 
         body {
-            font-family: 'Sawarabi Mincho', serif, sans-serif;
+            font-family: 'Sawarabi Mincho', serif, 'serif';
             background-color: var(--bg-color);
+            background-image: radial-gradient(circle at 50% 10%, #1a2a4a 0%, #0c1428 70%);
             color: var(--text-color);
             margin: 0;
-            padding: 20px;
+            padding: 40px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
+            min-height: 100vh;
         }
 
         header {
             text-align: center;
             margin-bottom: 40px;
+            position: relative;
         }
 
         h1 {
+            font-size: 2.5rem;
+            letter-spacing: 0.3rem;
             color: var(--accent-color);
-            border-bottom: 2px solid var(--accent-color);
-            padding-bottom: 10px;
+            text-shadow: 0 0 15px rgba(243, 156, 18, 0.5);
+            margin-bottom: 5px;
+        }
+
+        header p {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            letter-spacing: 0.1rem;
         }
 
         .container {
             width: 100%;
-            max-width: 600px;
+            max-width: 800px; /* 地図のために少し広げる */
+        }
+
+        /* 地図のスタイル */
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            z-index: 1;
+        }
+
+        .map-instruction {
+            text-align: center;
+            font-size: 0.8rem;
+            margin-bottom: 10px;
+            color: var(--accent-color);
+            opacity: 0.8;
         }
 
         form {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            margin-bottom: 40px;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            margin-bottom: 60px;
         }
 
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: var(--accent-color);
+            letter-spacing: 0.05rem;
         }
 
         input[type="text"], textarea {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 4px;
+            color: white;
             box-sizing: border-box;
+            font-family: inherit;
         }
 
-        textarea {
-            height: 80px;
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 8px rgba(243, 156, 18, 0.3);
         }
 
         button {
-            background-color: var(--primary-color);
-            color: white;
+            background: linear-gradient(135deg, var(--accent-color), var(--accent-glow));
+            color: #fff;
             border: none;
-            padding: 10px 20px;
+            padding: 12px 20px;
             border-radius: 4px;
             cursor: pointer;
             width: 100%;
-            font-size: 1rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            letter-spacing: 0.2rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(243, 156, 18, 0.2);
+            font-family: inherit;
         }
 
         button:hover {
-            background-color: var(--accent-color);
+            transform: translateY(-2px);
+            box-shadow: 0 0 25px rgba(243, 156, 18, 0.4);
+            filter: brightness(1.1);
         }
 
         .post-card {
-            background: white;
-            padding: 20px;
+            background: var(--card-bg);
+            backdrop-filter: blur(5px);
+            padding: 25px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
-            border-left: 5px solid var(--primary-color);
+            margin-bottom: 30px;
+            border-left: 2px solid var(--accent-color);
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+
+        .post-card:hover {
+            transform: scale(1.02);
+            background: rgba(255, 255, 255, 0.08);
         }
 
         .post-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
+            align-items: baseline;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
         }
 
         .post-name {
-            font-size: 1.2rem;
+            font-size: 1.3rem;
             font-weight: bold;
             color: var(--accent-color);
         }
 
         .post-date {
-            font-size: 0.8rem;
-            color: #999;
+            font-size: 0.75rem;
+            opacity: 0.5;
         }
 
         .post-comment {
+            line-height: 1.8;
+            font-size: 1rem;
+            color: #d1d1d1;
             white-space: pre-wrap;
+            margin-bottom: 15px;
+        }
+
+        /* いいねボタンのスタイル */
+        .like-container {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .action-btn {
+            background: none;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.3s ease;
+            width: auto;
+        }
+
+        .action-btn:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .delete-btn:hover {
+            border-color: #ff4757;
+            color: #ff4757;
+        }
+
+        /* 編集モードのスタイル */
+        .edit-mode-indicator {
+            display: none;
+            background: rgba(243, 156, 18, 0.1);
+            border: 1px solid var(--accent-color);
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 0.85rem;
+            color: var(--accent-color);
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .edit-mode-indicator.active {
+            display: flex;
+        }
+
+        .cancel-edit {
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .like-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 5px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.3s ease;
+            width: auto;
+            box-shadow: none;
+        }
+
+        .like-btn:hover {
+            border-color: #ff4757;
+            color: #ff4757;
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.3);
+            transform: scale(1.05);
+        }
+
+        .like-btn.active {
+            background: rgba(255, 71, 87, 0.1);
+            border-color: #ff4757;
+            color: #ff4757;
+        }
+
+        .like-btn .heart {
+            font-size: 1.1rem;
+            transition: transform 0.2s ease;
+        }
+
+        .like-btn:active .heart {
+            transform: scale(1.4);
+        }
+
+        /* タグのスタイル */
+        .tag-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .tag {
+            font-size: 0.75rem;
+            background: rgba(243, 156, 18, 0.1);
+            color: var(--accent-color);
+            border: 1px solid var(--border-color);
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.05rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tag:hover {
+            background: rgba(243, 156, 18, 0.3);
+            box-shadow: 0 0 8px var(--accent-color);
+        }
+
+        /* 選択用タグボタンのスタイル */
+        .tag-choices {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .tag-choice {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+            padding: 5px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+
+        .tag-choice:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .tag-choice.selected {
+            background: rgba(243, 156, 18, 0.15);
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            box-shadow: 0 0 12px rgba(243, 156, 18, 0.4);
+            text-shadow: 0 0 5px rgba(243, 156, 18, 0.5);
+        }
+
+        /* 絞り込み情報のスタイル */
+        .filter-info {
+            display: none;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            font-size: 0.9rem;
+            justify-content: space-between;
+            align-items: center;
+            color: var(--text-color);
+        }
+
+        .filter-info.active {
+            display: flex;
+        }
+
+        .filter-tag {
+            color: var(--accent-color);
+            font-weight: bold;
+            margin: 0 5px;
+        }
+
+        .clear-filter {
+            cursor: pointer;
+            color: #ff4757;
+            font-size: 0.8rem;
+            text-decoration: underline;
+        }
+
+        /* 画像のスタイル */
+        .post-image {
+            width: 100%;
+            max-height: 400px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .map-popup-image {
+            width: 100%;
+            max-height: 120px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        input[type="file"] {
+            background: none;
+            border: none;
+            padding: 5px 0;
+            color: var(--text-color);
+            font-size: 0.8rem;
+        }
+
+        /* 装飾的な要素：灯籠のような光 */
+        .post-card::after {
+            content: '';
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 4px;
+            height: 4px;
+            background: var(--accent-color);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-color);
+            opacity: 0.6;
         }
     </style>
 </head>
@@ -123,7 +405,17 @@
     </header>
 
     <div class="container">
+        <p class="map-instruction">地図をクリックして場所を指定できます</p>
+        <div id="map"></div>
+
         <form id="post-form">
+            <div id="edit-indicator" class="edit-mode-indicator">
+                <span>編集モード：投稿内容を修正しています</span>
+                <span class="cancel-edit" onclick="cancelEdit()">キャンセル</span>
+            </div>
+            <input type="hidden" id="edit-id" name="editId">
+            <input type="hidden" id="lat" name="lat">
+            <input type="hidden" id="lng" name="lng">
             <div class="form-group">
                 <label for="name">場所の名前</label>
                 <input type="text" id="name" name="name" placeholder="例：鴨川のほとり" required>
@@ -132,65 +424,326 @@
                 <label for="comment">コメント</label>
                 <textarea id="comment" name="comment" placeholder="例：夕暮れ時に座るのが最高です。" required></textarea>
             </div>
+            <div class="form-group">
+                <label>タグを選択（複数可）</label>
+                <div class="tag-choices">
+                    <span class="tag-choice" onclick="toggleTagChoice(this, '静か')">#静か</span>
+                    <span class="tag-choice" onclick="toggleTagChoice(this, '夜')">#夜</span>
+                    <span class="tag-choice" onclick="toggleTagChoice(this, '路地')">#路地</span>
+                    <span class="tag-choice" onclick="toggleTagChoice(this, '川沿い')">#川沿い</span>
+                </div>
+                <label for="tags">その他のタグ（カンマ区切り）</label>
+                <input type="text" id="tags" name="tags" placeholder="例：散歩, 桜">
+            </div>
+            <div class="form-group">
+                <label for="image">写真</label>
+                <input type="file" id="image" name="image" accept="image/*">
+            </div>
             <button type="submit">投稿する</button>
         </form>
+
+        <div id="filter-display" class="filter-info">
+            <span>絞り込み中：<span id="active-filter-tag" class="filter-tag"></span></span>
+            <span class="clear-filter" onclick="clearFilter()">絞り込みを解除</span>
+        </div>
 
         <div id="posts-list">
             <!-- 投稿がここに表示されます -->
         </div>
     </div>
 
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Leaflet Heatmap Plugin -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
     <script>
         const postForm = document.getElementById('post-form');
         const postsList = document.getElementById('posts-list');
+        const latInput = document.getElementById('lat');
+        const lngInput = document.getElementById('lng');
+
+        // 状態管理
+        let activeFilter = null;
+        let selectedPredefinedTags = new Set();
+        let allPosts = [];
+
+        // 地図の初期化 (京都中心)
+        const map = L.map('map').setView([35.0116, 135.7681], 13);
+
+        // ダークテーマのタイルレイヤー (CartoDB Dark Matter)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        let currentMarker = null;
+        const markers = [];
+        let heatLayer = null;
+
+        // タグボタンのトグル
+        function toggleTagChoice(el, tag) {
+            if (selectedPredefinedTags.has(tag)) {
+                selectedPredefinedTags.delete(tag);
+                el.classList.remove('selected');
+            } else {
+                selectedPredefinedTags.add(tag);
+                el.classList.add('selected');
+            }
+        }
+
+        // 絞り込みの設定
+        function setFilter(tag) {
+            activeFilter = tag;
+            document.getElementById('active-filter-tag').innerText = `#${tag}`;
+            document.getElementById('filter-display').classList.add('active');
+            renderPosts();
+            window.scrollTo({ top: document.getElementById('map').offsetTop - 20, behavior: 'smooth' });
+        }
+
+        // 絞り込みの解除
+        function clearFilter() {
+            activeFilter = null;
+            document.getElementById('filter-display').classList.remove('active');
+            renderPosts();
+        }
+
+        // 地図クリックイベント
+        map.on('click', (e) => {
+            const { lat, lng } = e.latlng;
+            latInput.value = lat;
+            lngInput.value = lng;
+
+            if (currentMarker) {
+                map.removeLayer(currentMarker);
+            }
+            currentMarker = L.marker([lat, lng]).addTo(map)
+                .bindPopup("ここを投稿場所に指定しました")
+                .openPopup();
+        });
 
         // 投稿一覧を取得して表示
         async function fetchPosts() {
             try {
                 const response = await fetch('/posts');
-                const posts = await response.json();
-                
-                postsList.innerHTML = '';
-                posts.forEach(post => {
-                    const card = document.createElement('div');
-                    card.className = 'post-card';
-                    
-                    const date = new Date(post.created_at).toLocaleString('ja-JP');
-                    
-                    card.innerHTML = `
-                        <div class="post-header">
-                            <span class="post-name">${escapeHtml(post.name)}</span>
-                            <span class="post-date">${date}</span>
-                        </div>
-                        <div class="post-comment">${escapeHtml(post.comment)}</div>
-                    `;
-                    postsList.appendChild(card);
-                });
+                allPosts = await response.json();
+                renderPosts();
             } catch (err) {
                 console.error('エラー:', err);
+            }
+        }
+
+        // 投稿の表示（フィルタリング適用）
+        function renderPosts() {
+            // フィルタリング
+            const posts = activeFilter 
+                ? allPosts.filter(p => p.tags && p.tags.split(',').map(t => t.trim()).includes(activeFilter))
+                : allPosts;
+
+            // 既存のマーカーとヒートマップを削除
+            markers.forEach(m => map.removeLayer(m));
+            markers.length = 0;
+            if (heatLayer) {
+                map.removeLayer(heatLayer);
+            }
+
+            const heatPoints = [];
+            postsList.innerHTML = '';
+            
+            posts.forEach(post => {
+                // 地図にマーカーを追加
+                if (post.lat && post.lng) {
+                    const marker = L.marker([post.lat, post.lng]).addTo(map);
+                    
+                    let popupContent = `<b>${escapeHtml(post.name)}</b><br>${escapeHtml(post.comment)}`;
+                    if (post.tags) {
+                        const tags = post.tags.split(',').map(t => `#${t.trim()}`).join(' ');
+                        popupContent += `<br><small style="color: #f39c12">${escapeHtml(tags)}</small>`;
+                    }
+                    if (post.image_url) {
+                        popupContent += `<br><img src="${post.image_url}" class="map-popup-image">`;
+                    }
+                    
+                    marker.bindPopup(popupContent);
+                    markers.push(marker);
+
+                    // ヒートマップ用ポイントに追加
+                    heatPoints.push([post.lat, post.lng, 1]);
+                }
+
+                // リスト表示
+                const card = document.createElement('div');
+                card.className = 'post-card';
+                
+                const date = new Date(post.created_at).toLocaleString('ja-JP');
+                
+                // タグのHTMLを生成
+                let tagsHtml = '';
+                if (post.tags) {
+                    const tags = post.tags.split(',').map(t => t.trim()).filter(t => t !== '');
+                    if (tags.length > 0) {
+                        tagsHtml = '<div class="tag-container">' + 
+                            tags.map(tag => `<span class="tag" onclick="setFilter('${escapeJs(tag)}')">#${escapeHtml(tag)}</span>`).join('') + 
+                            '</div>';
+                    }
+                }
+
+                // 画像のHTML
+                const imageHtml = post.image_url ? `<img src="${post.image_url}" class="post-image" alt="${escapeHtml(post.name)}">` : '';
+
+                card.innerHTML = `
+                    <div class="post-header">
+                        <span class="post-name">${escapeHtml(post.name)}</span>
+                        <span class="post-date">${date}</span>
+                    </div>
+                    ${imageHtml}
+                    <div class="post-comment">${escapeHtml(post.comment)}</div>
+                    ${tagsHtml}
+                    <div class="like-container">
+                        <button class="action-btn" onclick="startEdit(${post.id}, '${escapeJs(post.name)}', '${escapeJs(post.comment)}', '${escapeJs(post.tags || '')}')">編集</button>
+                        <button class="action-btn delete-btn" onclick="deletePost(${post.id})">削除</button>
+                        <button class="like-btn" onclick="addLike(${post.id})">
+                            <span class="heart">♡</span>
+                            <span class="like-count" id="like-count-${post.id}">${post.likes || 0}</span>
+                        </button>
+                    </div>
+                `;
+                postsList.appendChild(card);
+            });
+
+            // ヒートマップレイヤーを追加
+            if (heatPoints.length > 0) {
+                heatLayer = L.heatLayer(heatPoints, {
+                    radius: 25,
+                    blur: 15,
+                    maxZoom: 17,
+                    gradient: {
+                        0.2: '#1a2a4a', // 濃い紺
+                        0.4: '#3498db', // 青
+                        0.6: '#f1c40f', // 黄色
+                        0.8: '#f39c12', // オレンジ
+                        1.0: '#e67e22'  // 強い灯り
+                    }
+                }).addTo(map);
+            }
+        }
+
+        // 削除機能
+        async function deletePost(id) {
+            if (!confirm('この投稿を削除しますか？')) return;
+            try {
+                const response = await fetch(`/post/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    fetchPosts();
+                }
+            } catch (err) {
+                console.error('削除エラー:', err);
+            }
+        }
+
+        // 編集モード開始
+        function startEdit(id, name, comment, tags) {
+            cancelEdit(); // 状態をリセットしてから
+            
+            document.getElementById('edit-id').value = id;
+            document.getElementById('name').value = name;
+            document.getElementById('comment').value = comment;
+            
+            // タグの復元
+            const tagArray = tags.split(',').map(t => t.trim());
+            const otherTags = [];
+            tagArray.forEach(t => {
+                const choiceBtn = Array.from(document.querySelectorAll('.tag-choice')).find(el => el.innerText === `#${t}`);
+                if (choiceBtn) {
+                    toggleTagChoice(choiceBtn, t);
+                } else if (t !== '') {
+                    otherTags.push(t);
+                }
+            });
+            document.getElementById('tags').value = otherTags.join(', ');
+            
+            document.getElementById('edit-indicator').classList.add('active');
+            document.querySelector('#post-form button[type="submit"]').innerText = '更新する';
+            window.scrollTo({ top: document.getElementById('post-form').offsetTop - 20, behavior: 'smooth' });
+        }
+
+        // 編集キャンセル
+        function cancelEdit() {
+            document.getElementById('edit-id').value = '';
+            postForm.reset();
+            selectedPredefinedTags.clear();
+            document.querySelectorAll('.tag-choice').forEach(el => el.classList.remove('selected'));
+            document.getElementById('edit-indicator').classList.remove('active');
+            document.querySelector('#post-form button[type="submit"]').innerText = '投稿する';
+        }
+
+        // いいねを追加
+        async function addLike(id) {
+            try {
+                const response = await fetch(`/post/${id}/like`, { method: 'POST' });
+                if (response.ok) {
+                    const data = await response.json();
+                    const countSpan = document.getElementById(`like-count-${id}`);
+                    if (countSpan) {
+                        countSpan.innerText = data.likes;
+                        countSpan.parentElement.classList.add('active');
+                    }
+                }
+            } catch (err) {
+                console.error('いいねエラー:', err);
             }
         }
 
         // 投稿を送信
         postForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const name = postForm.name.value;
-            const comment = postForm.comment.value;
+            const editId = document.getElementById('edit-id').value;
+            
+            // タグの統合
+            const otherTags = postForm.tags.value.split(',').map(t => t.trim()).filter(t => t !== '');
+            const allTags = [...Array.from(selectedPredefinedTags), ...otherTags].join(',');
 
-            try {
-                const response = await fetch('/post', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, comment })
-                });
-
-                if (response.ok) {
-                    postForm.reset();
-                    fetchPosts();
+            if (editId) {
+                // 更新モード (PUT)
+                const name = postForm.name.value;
+                const comment = postForm.comment.value;
+                try {
+                    const response = await fetch(`/post/${editId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, comment, tags: allTags })
+                    });
+                    if (response.ok) {
+                        cancelEdit();
+                        fetchPosts();
+                    }
+                } catch (err) {
+                    console.error('更新エラー:', err);
                 }
-            } catch (err) {
-                console.error('エラー:', err);
-                alert('投稿に失敗しました。');
+            } else {
+                // 新規投稿モード (POST)
+                const formData = new FormData(postForm);
+                formData.set('tags', allTags); // 統合したタグをセット
+
+                try {
+                    const response = await fetch('/post', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (response.ok) {
+                        cancelEdit(); // resetの代わりにcancelEditでタグ選択もクリア
+                        latInput.value = '';
+                        lngInput.value = '';
+                        if (currentMarker) {
+                            map.removeLayer(currentMarker);
+                            currentMarker = null;
+                        }
+                        fetchPosts();
+                    }
+                } catch (err) {
+                    console.error('エラー:', err);
+                    alert('投稿に失敗しました。');
+                }
             }
         });
 
@@ -202,6 +755,15 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        }
+
+        function escapeJs(str) {
+            return str
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '\\"')
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '\\r');
         }
 
         // 初期読み込み
