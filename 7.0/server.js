@@ -1,19 +1,11 @@
-require('dotenv').config();
 const express = require('express');
-const { Pool } = require('pg');
+const Database = require('better-sqlite3');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 
 const app = express();
-
-// PostgreSQL接続設定
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Supabaseなどのホスト環境で必要
-  }
-});
+const db = new Database('kyoto.db');
 
 // アップロード先フォルダの作成
 const uploadDir = path.join(__dirname, 'uploads');
@@ -31,37 +23,29 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// テーブルの自動作成（非同期）
-async function initDb() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS posts (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        comment TEXT NOT NULL,
-        likes INTEGER DEFAULT 0,
-        tags TEXT,
-        lat REAL,
-        lng REAL,
-        image_url TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('Database initialized');
-  } catch (err) {
-    console.error('Database initialization error:', err);
-  }
-}
-initDb();
+// テーブルの自動作成
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    comment TEXT NOT NULL,
+    likes INTEGER DEFAULT 0,
+    tags TEXT,
+    lat REAL,
+    lng REAL,
+    image_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`).run();
 
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 投稿一覧の取得
-app.get('/posts', async (req, res) => {
+app.get('/posts', (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM posts ORDER BY created_at DESC');
+    const rows = db.prepare('SELECT * FROM posts ORDER BY created_at DESC').all();
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -69,14 +53,12 @@ app.get('/posts', async (req, res) => {
 });
 
 // 投稿の更新
-app.put('/post/:id', async (req, res) => {
+app.put('/post/:id', (req, res) => {
   const { id } = req.params;
   const { name, comment, tags } = req.body;
   try {
-    await pool.query(
-      'UPDATE posts SET name = $1, comment = $2, tags = $3 WHERE id = $4',
-      [name, comment, tags, id]
-    );
+    const stmt = db.prepare('UPDATE posts SET name = ?, comment = ?, tags = ? WHERE id = ?');
+    stmt.run(name, comment, tags, id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -84,13 +66,11 @@ app.put('/post/:id', async (req, res) => {
 });
 
 // 投稿の削除
-app.delete('/post/:id', async (req, res) => {
+app.delete('/post/:id', (req, res) => {
   const { id } = req.params;
   try {
     // 画像パスを取得してファイルを削除
-    const { rows } = await pool.query('SELECT image_url FROM posts WHERE id = $1', [id]);
-    const post = rows[0];
-    
+    const post = db.prepare('SELECT image_url FROM posts WHERE id = ?').get(id);
     if (post && post.image_url) {
       const filePath = path.join(__dirname, post.image_url);
       if (fs.existsSync(filePath)) {
@@ -98,7 +78,7 @@ app.delete('/post/:id', async (req, res) => {
       }
     }
 
-    await pool.query('DELETE FROM posts WHERE id = $1', [id]);
+    db.prepare('DELETE FROM posts WHERE id = ?').run(id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -106,12 +86,14 @@ app.delete('/post/:id', async (req, res) => {
 });
 
 // いいねの追加
-app.post('/post/:id/like', async (req, res) => {
+app.post('/post/:id/like', (req, res) => {
   const { id } = req.params;
   try {
-    const result = await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1 RETURNING likes', [id]);
-    if (result.rowCount > 0) {
-      res.json({ success: true, likes: result.rows[0].likes });
+    const stmt = db.prepare('UPDATE posts SET likes = likes + 1 WHERE id = ?');
+    const result = stmt.run(id);
+    if (result.changes > 0) {
+      const updated = db.prepare('SELECT likes FROM posts WHERE id = ?').get(id);
+      res.json({ success: true, likes: updated.likes });
     } else {
       res.status(404).json({ error: 'Post not found' });
     }
@@ -121,7 +103,7 @@ app.post('/post/:id/like', async (req, res) => {
 });
 
 // 新規投稿
-app.post('/post', upload.single('image'), async (req, res) => {
+app.post('/post', upload.single('image'), (req, res) => {
   const { name, comment, tags, lat, lng } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
@@ -130,10 +112,8 @@ app.post('/post', upload.single('image'), async (req, res) => {
   }
 
   try {
-    await pool.query(
-      'INSERT INTO posts (name, comment, tags, lat, lng, image_url) VALUES ($1, $2, $3, $4, $5, $6)',
-      [name, comment, tags || '', lat || null, lng || null, imageUrl]
-    );
+    const stmt = db.prepare('INSERT INTO posts (name, comment, tags, lat, lng, image_url) VALUES (?, ?, ?, ?, ?, ?)');
+    stmt.run(name, comment, tags || '', lat || null, lng || null, imageUrl);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
