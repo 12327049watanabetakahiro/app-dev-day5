@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滞留の地形 | 管理画面</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --danger: #dc2626;
+            --bg: #f8fafc;
+            --border: #e2e8f0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+            background: var(--bg);
+            color: #1e293b;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100vh;
+        }
+
+        /* サイドバー */
+        .sidebar {
+            background: #fff;
+            border-right: 1px solid var(--border);
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        h1 { font-size: 1.2rem; margin: 0; letter-spacing: 0.1em; }
+        
+        .stat-card {
+            background: var(--bg);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .stat-title { font-size: 0.75rem; color: #64748b; margin-bottom: 5px; text-transform: uppercase; }
+        .stat-value { font-size: 1.5rem; font-weight: bold; }
+
+        .tag-stats { list-style: none; padding: 0; margin: 0; }
+        .tag-stat-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* メインエリア */
+        .main {
+            padding: 40px;
+            overflow-y: auto;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            gap: 20px;
+        }
+
+        .search-group {
+            display: flex;
+            gap: 10px;
+            flex: 1;
+        }
+
+        input[type="text"] {
+            padding: 10px 15px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            flex: 1;
+            max-width: 400px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: none;
+            font-weight: 600;
+        }
+        .btn-primary { background: var(--primary); color: #fff; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-csv { background: #059669; color: #fff; }
+
+        /* 地図 */
+        #map {
+            height: 300px;
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 30px;
+        }
+
+        /* テーブル */
+        .table-wrapper {
+            background: #fff;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            text-align: left;
+        }
+
+        th {
+            background: #f1f5f9;
+            padding: 15px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        tr:hover { background: #f8fafc; }
+
+        .tag-label {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-right: 4px;
+            margin-bottom: 4px;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 2000;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading-overlay">読み込み中...</div>
+
+    <div class="layout">
+        <!-- サイドバー -->
+        <aside class="sidebar">
+            <h1>滞留の地形<br><small style="font-weight: normal; font-size: 0.8rem; color: #64748b;">管理者パネル</small></h1>
+            
+            <div class="stat-card">
+                <div class="stat-title">全投稿数</div>
+                <div class="stat-value" id="total-count">0</div>
+            </div>
+
+            <div>
+                <div class="stat-title">タグ別集計</div>
+                <ul class="tag-stats" id="tag-stats-list">
+                    <!-- 集計データ -->
+                </ul>
+            </div>
+
+            <button class="btn btn-csv" id="download-csv">全データをCSV出力</button>
+        </aside>
+
+        <!-- メイン -->
+        <main class="main">
+            <div id="map"></div>
+
+            <div class="controls">
+                <div class="search-group">
+                    <input type="text" id="search-input" placeholder="コメントまたはタグで検索...">
+                </div>
+                <div>
+                    表示中: <span id="filtered-count">0</span>件
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 160px;">日時</th>
+                            <th style="width: 100px;">時間帯</th>
+                            <th style="width: 200px;">タグ</th>
+                            <th>コメント</th>
+                            <th style="width: 150px;">位置 (Lat, Lng)</th>
+                            <th style="width: 80px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="posts-tbody">
+                        <!-- 投稿データ -->
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, query, orderBy, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBXoQYrIC4dQLDCnE76je_CU32KqYAxuWw",
+            authDomain: "city-log-6817f.firebaseapp.com",
+            projectId: "city-log-6817f",
+            storageBucket: "city-log-6817f.firebasestorage.app",
+            messagingSenderId: "524271753384",
+            appId: "1:524271753384:web:c3983c10b2331f6cf38a9d",
+            measurementId: "G-ET61473CP1"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const postsCol = collection(db, "posts");
+
+        let allData = [];
+        let filteredData = [];
+
+        // --- 地図初期化 ---
+        const map = L.map('map').setView([35.0116, 135.7681], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+        let markersGroup = L.layerGroup().addTo(map);
+
+        // --- リアルタイムデータ取得 ---
+        const q = query(postsCol, orderBy("createdAt", "desc"));
+        onSnapshot(q, (snapshot) => {
+            allData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            updateUI();
+            document.getElementById('loading').style.display = 'none';
+        });
+
+        // --- UI更新 ---
+        function updateUI() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            
+            // フィルタリング (時間帯も検索対象に含める)
+            filteredData = allData.filter(d => {
+                const tags = Array.isArray(d.tags) ? d.tags.join(' ') : (d.tag || '');
+                const comment = d.comment || '';
+                const tz = d.timeZone || '';
+                return tags.toLowerCase().includes(searchTerm) || 
+                       comment.toLowerCase().includes(searchTerm) ||
+                       tz.toLowerCase().includes(searchTerm);
+            });
+
+            renderTable();
+            renderStats();
+            renderMarkers();
+            document.getElementById('filtered-count').innerText = filteredData.length;
+        }
+
+        // テーブル描画
+        function renderTable() {
+            const tbody = document.getElementById('posts-tbody');
+            tbody.innerHTML = '';
+            
+            filteredData.forEach(d => {
+                const tr = document.createElement('tr');
+                const date = d.createdAt ? d.createdAt.toDate().toLocaleString('ja-JP') : '...';
+                const tags = Array.isArray(d.tags) ? d.tags : (d.tag ? [d.tag] : []);
+                const tagsHtml = tags.map(t => `<span class="tag-label">${t}</span>`).join('');
+
+                tr.innerHTML = `
+                    <td>${date}</td>
+                    <td style="font-weight: 600;">${d.timeZone || '-'}</td>
+                    <td>${tagsHtml}</td>
+                    <td>${escapeHtml(d.comment || '-')}</td>
+                    <td><small>${d.lat.toFixed(5)},<br>${d.lng.toFixed(5)}</small></td>
+                    <td><button class="btn btn-danger" onclick="deletePost('${d.id}')">削除</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 集計描画
+        function renderStats() {
+            document.getElementById('total-count').innerText = allData.length;
+            
+            const counts = {};
+            allData.forEach(d => {
+                const tags = Array.isArray(d.tags) ? d.tags : (d.tag ? [d.tag] : []);
+                tags.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+            });
+
+            const statList = document.getElementById('tag-stats-list');
+            statList.innerHTML = '';
+            Object.entries(counts).sort((a,b) => b[1] - a[1]).forEach(([tag, count]) => {
+                const li = document.createElement('li');
+                li.className = 'tag-stat-item';
+                li.innerHTML = `<span>${tag}</span><strong>${count}</strong>`;
+                statList.appendChild(li);
+            });
+        }
+
+        // マーカー描画
+        function renderMarkers() {
+            markersGroup.clearLayers();
+            filteredData.forEach(d => {
+                L.circleMarker([d.lat, d.lng], { radius: 5, color: '#2563eb', fillOpacity: 0.5 }).addTo(markersGroup);
+            });
+        }
+
+        // --- 削除機能 ---
+        window.deletePost = async (id) => {
+            if (!confirm('本当に削除しますか？この操作は取り消せません。')) return;
+            try {
+                await deleteDoc(doc(db, "posts", id));
+            } catch (err) {
+                alert('削除に失敗しました: ' + err.message);
+            }
+        };
+
+        // --- 検索イベント ---
+        document.getElementById('search-input').addEventListener('input', updateUI);
+
+        // --- CSV出力 ---
+        document.getElementById('download-csv').onclick = () => {
+            if (allData.length === 0) return;
+            
+            const headers = ["ID", "CreatedAt", "TimeZone", "Lat", "Lng", "PlaceName", "Tags", "Comment"];
+            const rows = allData.map(d => [
+                d.id,
+                d.createdAt ? d.createdAt.toDate().toISOString() : "",
+                d.timeZone || "",
+                d.lat,
+                d.lng,
+                `"${(d.placeName || "").replace(/"/g, '""')}"`,
+                `"${(Array.isArray(d.tags) ? d.tags.join(',') : (d.tag || "")).replace(/"/g, '""')}"`,
+                `"${(d.comment || "").replace(/"/g, '""')}"`
+            ]);
+
+            const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(",")).join("\n");
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `city_log_data_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        }
+    </script>
+</body>
+</html>

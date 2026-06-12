@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>滞留の地形 | 観測の循環</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        :root {
+            --bg: #000000;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg);
+            overflow: hidden;
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+        }
+
+        /* 映画的な時間表示オーバーレイ */
+        #clock-overlay {
+            position: fixed;
+            top: 60px;
+            left: 60px;
+            z-index: 2000;
+            color: #ffffff;
+            pointer-events: none;
+            transition: opacity 1s ease-in-out;
+            opacity: 0.6;
+        }
+
+        .time-display {
+            font-size: 3rem;
+            font-weight: 200;
+            letter-spacing: 0.1em;
+            line-height: 1;
+            margin-bottom: 5px;
+        }
+
+        .period-display {
+            font-size: 1rem;
+            font-weight: 300;
+            letter-spacing: 0.8em;
+            text-transform: uppercase;
+            padding-left: 5px;
+        }
+
+        #map-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        /* 地図の基本フィルタ（初期状態：昼） */
+        .leaflet-tile-pane {
+            filter: grayscale(1) invert(1) brightness(1.5) contrast(1.2) hue-rotate(0deg) saturate(1);
+            transition: filter 5s ease-in-out;
+        }
+
+        /* 時間帯別の色温度フィルタ定義 */
+        .map-morning .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(1.6) contrast(1.1) sepia(0.3) hue-rotate(180deg) saturate(1.5); }
+        .map-afternoon .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(1.5) contrast(1.2); }
+        .map-twilight .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(1.3) contrast(1.3) sepia(0.5) hue-rotate(-30deg) saturate(2); }
+        .map-night .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(1.1) contrast(1.2) sepia(0.2) hue-rotate(200deg); }
+        .map-midnight .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(0.9) contrast(1.3) sepia(0.4) hue-rotate(240deg) saturate(1.2); }
+
+        /* 灯りのアニメーション (白ベース) */
+        .light-container {
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 3s ease-in-out;
+        }
+
+        .light-core {
+            position: absolute;
+            width: var(--core-size);
+            height: var(--core-size);
+            background: #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 0 15px #ffffff, 0 0 30px #ffffff;
+            animation: breathe var(--speed) infinite ease-in-out;
+            animation-delay: var(--delay);
+        }
+
+        .light-glow {
+            position: absolute;
+            width: var(--glow-size);
+            height: var(--glow-size);
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, transparent 70%);
+            border-radius: 50%;
+            filter: blur(12px);
+            animation: breathe-glow var(--speed) infinite ease-in-out;
+            animation-delay: var(--delay);
+        }
+
+        /* 深夜の不規則な脈動用 */
+        .irregular .light-core { animation-name: breathe-irregular; }
+        .irregular .light-glow { animation-name: breathe-glow-irregular; }
+
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+        @keyframes breathe-glow {
+            0%, 100% { transform: scale(1); opacity: 0.1; }
+            50% { transform: scale(1.4); opacity: 0.4; }
+        }
+
+        @keyframes breathe-irregular {
+            0%, 100% { transform: scale(1); opacity: 0.3; }
+            20% { transform: scale(1.1); opacity: 0.8; }
+            40% { transform: scale(0.9); opacity: 0.4; }
+            70% { transform: scale(1.2); opacity: 0.9; }
+        }
+        @keyframes breathe-glow-irregular {
+            0%, 100% { transform: scale(1); opacity: 0.1; }
+            40% { transform: scale(1.5); opacity: 0.3; }
+            80% { transform: scale(0.8); opacity: 0.1; }
+        }
+
+        .leaflet-popup-pane, .leaflet-control-zoom, .overlay { display: none !important; }
+
+    </style>
+</head>
+<body>
+    <div id="clock-overlay">
+        <div class="time-display" id="clock-time">00:00</div>
+        <div class="period-display" id="clock-period">-</div>
+    </div>
+
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBXoQYrIC4dQLDCnE76je_CU32KqYAxuWw",
+            authDomain: "city-log-6817f.firebaseapp.com",
+            projectId: "city-log-6817f",
+            storageBucket: "city-log-6817f.firebasestorage.app",
+            messagingSenderId: "524271753384",
+            appId: "1:524271753384:web:c3983c10b2331f6cf38a9d",
+            measurementId: "G-ET61473CP1"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const postsCol = collection(db, "posts");
+
+        const PERIODS = [
+            { id: 'morning', label: '朝', range: [5, 11], class: 'map-morning' },
+            { id: 'afternoon', label: '昼', range: [11, 17], class: 'map-afternoon' },
+            { id: 'twilight', label: '夕方', range: [17, 19], class: 'map-twilight' },
+            { id: 'night', label: '夜', range: [19, 24], class: 'map-night' },
+            { id: 'midnight', label: '深夜', range: [0, 5], class: 'map-midnight' }
+        ];
+
+        let currentPeriodIdx = 0;
+        let cycleStartTime = Date.now();
+        const CYCLE_DURATION = 30000; 
+        const markerGroups = {}; 
+
+        const mapContainer = document.getElementById('map');
+        const clockEl = document.getElementById('clock-overlay');
+        const timeEl = document.getElementById('clock-time');
+        const periodNameEl = document.getElementById('clock-period');
+
+        const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([35.0116, 135.7681], 15);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+        PERIODS.forEach(p => {
+            markerGroups[p.id] = L.layerGroup().addTo(map);
+        });
+
+        onSnapshot(query(postsCol, orderBy("createdAt", "desc")), (snapshot) => {
+            Object.values(markerGroups).forEach(g => g.clearLayers());
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (!data.lat || !data.lng) return;
+
+                // 投稿日時ではなく、記録された「時間帯(timeZone)」を使用して振り分ける
+                const period = PERIODS.find(p => p.label === data.timeZone);
+                if (!period) return;
+
+                const speed = 6 + (Math.random() * 4);
+                const div = L.divIcon({
+                    className: `light-container ${period.id === 'midnight' ? 'irregular' : ''}`,
+                    html: `<div class="light-glow" style="--glow-size: 80px; --speed: ${speed}s; --delay: ${Math.random() * -20}s;"></div>
+                           <div class="light-core" style="--core-size: 8px; --speed: ${speed}s; --delay: ${Math.random() * -20}s;"></div>`,
+                    iconSize: [0, 0]
+                });
+                L.marker([data.lat, data.lng], { icon: div }).addTo(markerGroups[period.id]);
+            });
+            updateCycle();
+        });
+
+        function updateCycle() {
+            const period = PERIODS[currentPeriodIdx];
+            clockEl.style.opacity = "0";
+            setTimeout(() => {
+                periodNameEl.innerText = period.label;
+                clockEl.style.opacity = "0.6";
+            }, 1000);
+
+            PERIODS.forEach(p => mapContainer.classList.remove(p.class));
+            mapContainer.classList.add(period.class);
+
+            PERIODS.forEach((p, idx) => {
+                const group = markerGroups[p.id];
+                group.getLayers().forEach(m => {
+                    const el = m.getElement();
+                    if (el) el.style.opacity = (idx === currentPeriodIdx) ? "1" : (idx === (currentPeriodIdx - 1 + PERIODS.length) % PERIODS.length ? "0.2" : "0");
+                });
+            });
+        }
+
+        function updateClock() {
+            const elapsed = Date.now() - cycleStartTime;
+            const progress = elapsed / CYCLE_DURATION;
+            const period = PERIODS[currentPeriodIdx];
+            const startHour = period.range[0];
+            const endHour = period.range[1];
+            const totalHours = endHour - startHour;
+            const currentTotalMinutes = (startHour * 60) + (progress * totalHours * 60);
+            const displayHours = Math.floor(currentTotalMinutes / 60) % 24;
+            const displayMinutes = Math.floor(currentTotalMinutes % 60);
+            timeEl.innerText = `${String(displayHours).padStart(2, '0')}:${String(displayMinutes).padStart(2, '0')}`;
+            requestAnimationFrame(updateClock);
+        }
+
+        setInterval(() => {
+            currentPeriodIdx = (currentPeriodIdx + 1) % PERIODS.length;
+            cycleStartTime = Date.now();
+            updateCycle();
+        }, CYCLE_DURATION);
+
+        updateClock();
+    </script>
+</body>
+</html>
