@@ -125,8 +125,6 @@
         }
 
         #map { height: 100%; width: 100%; }
-        /* 地図をフルカラー（標準）に戻す */
-        .leaflet-tile-pane { filter: none; }
 
         .tag-grid {
             display: grid;
@@ -154,6 +152,7 @@
         }
 
         /* 感情別の色設定 */
+        .emotion-btn { height: 100px; display: flex; flex-direction: column; justify-content: center; font-size: 1rem !important; }
         .emotion-btn[data-emo="落ち着きたい"].selected { background: #7DA7D9; color: #fff; border-color: #7DA7D9; }
         .emotion-btn[data-emo="考え事をしたい"].selected { background: #D9C77D; color: #fff; border-color: #D9C77D; }
         .emotion-btn[data-emo="逃げたい"].selected { background: #D9947D; color: #fff; border-color: #D9947D; }
@@ -237,12 +236,15 @@
         .btn:disabled { background: #eee; color: #ccc; cursor: not-allowed; }
 
         .success-screen {
-            flex: 1;
-            display: flex;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #fff;
+            display: none;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             text-align: center;
+            z-index: 3000;
         }
 
         .success-text {
@@ -268,13 +270,25 @@
     </style>
 </head>
 <body>
-    <div class="app-container">
+    <div id="success-message" class="success-screen">
+        <p class="success-text">記録しました</p>
+        <button class="btn-outline" onclick="resetUI()">続けて採集する</button>
+    </div>
+
+    <div class="app-container" id="main-content">
         
         <!-- STEP 1: 位置選択 -->
         <section id="step-1" class="step active">
             <header>
                 <h1>滞留の地形</h1>
-                <p class="subtitle">あなたが自然と行ってしまう場所を<br>都市に記録してください</p>
+                <p class="subtitle">
+                    あなたが気づけば行ってしまう場所を記録してください。<br><br>
+                    ・一人になりたい時<br>
+                    ・考え事をしたい時<br>
+                    ・何もしなくていい時<br>
+                    ・逃げたくなった時<br><br>
+                    そんな場所を集めています。
+                </p>
             </header>
 
             <div class="search-container">
@@ -286,16 +300,66 @@
 
             <div class="map-wrapper">
                 <div id="map"></div>
+                <div id="selected-station-display" style="position: absolute; bottom: 10px; left: 10px; background: rgba(255,255,255,0.9); padding: 8px 15px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; display: none; z-index: 1000; box-shadow: var(--shadow); border: 1px solid var(--border);">
+                    📍 <span id="station-name-step1">取得中...</span>
+                </div>
             </div>
 
-            <button class="btn btn-primary" id="to-step-2" disabled>場所を確定する</button>
+            <button class="btn btn-primary" id="to-step-2" disabled>① 場所を確定する</button>
         </section>
 
-        <!-- STEP 2: タグ・コメント -->
+        <!-- STEP 2: 時間帯選択 -->
         <section id="step-2" class="step">
             <header>
-                <h1>滞留の気配</h1>
-                <p class="subtitle">その場所でのあなたの状態を選んでください</p>
+                <h1>滞留の時間</h1>
+                <p class="subtitle">その場所によく行く時間帯を選んでください</p>
+            </header>
+
+            <div class="form-group">
+                <label>滞留する時間（必須）</label>
+                <div class="tag-grid" id="timezone-container">
+                    <div class="timezone-btn" data-tz="朝">朝<br><small>5:00-11:00</small></div>
+                    <div class="timezone-btn" data-tz="昼">昼<br><small>11:00-17:00</small></div>
+                    <div class="timezone-btn" data-tz="夕方">夕方<br><small>17:00-19:00</small></div>
+                    <div class="timezone-btn" data-tz="夜">夜<br><small>19:00-24:00</small></div>
+                    <div class="timezone-btn" data-tz="深夜">深夜<br><small>0:00-5:00</small></div>
+                </div>
+            </div>
+
+            <div class="btn-container">
+                <button class="btn btn-secondary" onclick="changeStep(1)">戻る</button>
+                <button class="btn btn-primary" id="to-step-3" disabled>② 次へ</button>
+            </div>
+        </section>
+
+        <!-- STEP 3: 感情選択 -->
+        <section id="step-3" class="step">
+            <header>
+                <h1>滞留の動機</h1>
+                <p class="subtitle">その時の気持ちに最も近いものを選んでください</p>
+            </header>
+
+            <div class="form-group">
+                <label>その時の気持ち（必須 / 1つ選択）</label>
+                <div class="tag-grid" id="emotion-container">
+                    <div class="tag-btn emotion-btn" data-emo="落ち着きたい">落ち着きたい</div>
+                    <div class="tag-btn emotion-btn" data-emo="考え事をしたい">考え事をしたい</div>
+                    <div class="tag-btn emotion-btn" data-emo="逃げたい">逃げたい</div>
+                    <div class="tag-btn emotion-btn" data-emo="一人になりたい">一人になりたい</div>
+                </div>
+            </div>
+
+            <div class="btn-container">
+                <button class="btn btn-secondary" onclick="changeStep(2)">戻る</button>
+                <button class="btn btn-primary" id="to-step-4" disabled>③ 次へ</button>
+            </div>
+        </section>
+
+        <!-- STEP 4: タグ・コメント -->
+        <section id="step-4" class="step">
+            <header>
+                <h1>滞留の記録</h1>
+                <p class="subtitle">場所の空気感や、言葉を添えてください</p>
             </header>
 
             <div class="form-group">
@@ -313,39 +377,18 @@
             </div>
 
             <div class="form-group">
-                <label>滞留する時間（必須）</label>
-                <div class="tag-grid" id="timezone-container">
-                    <div class="timezone-btn" data-tz="朝">朝<br><small>5:00-11:00</small></div>
-                    <div class="timezone-btn" data-tz="昼">昼<br><small>11:00-17:00</small></div>
-                    <div class="timezone-btn" data-tz="夕方">夕方<br><small>17:00-19:00</small></div>
-                    <div class="timezone-btn" data-tz="夜">夜<br><small>19:00-24:00</small></div>
-                    <div class="timezone-btn" data-tz="深夜">深夜<br><small>0:00-5:00</small></div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>その時の気持ち（必須 / 1つ選択）</label>
-                <div class="tag-grid" id="emotion-container">
-                    <div class="tag-btn emotion-btn" data-emo="落ち着きたい">落ち着きたい</div>
-                    <div class="tag-btn emotion-btn" data-emo="考え事をしたい">考え事をしたい</div>
-                    <div class="tag-btn emotion-btn" data-emo="逃げたい">逃げたい</div>
-                    <div class="tag-btn emotion-btn" data-emo="一人になりたい">一人になりたい</div>
-                </div>
-            </div>
-
-            <div class="form-group">
                 <label>言葉の堆積（任意）</label>
-                <textarea id="comment" placeholder="この場所について一言" rows="3"></textarea>
+                <textarea id="comment" placeholder="例：&#10;授業をサボった日に来る&#10;何もしなくていい場所&#10;終電を逃した日にいた&#10;なぜか落ち着く" rows="5"></textarea>
             </div>
 
             <div class="btn-container">
-                <button class="btn btn-secondary" onclick="changeStep(1)">戻る</button>
-                <button class="btn btn-primary" id="to-step-3" disabled>確認へ</button>
+                <button class="btn btn-secondary" onclick="changeStep(3)">戻る</button>
+                <button class="btn btn-primary" id="to-step-5" disabled>④ 確認へ</button>
             </div>
         </section>
 
-        <!-- STEP 3: 確認 -->
-        <section id="step-3" class="step">
+        <!-- STEP 5: 確認 -->
+        <section id="step-5" class="step">
             <header>
                 <h1>採集の確認</h1>
                 <p class="subtitle">以下の内容で都市の記憶を記録します</p>
@@ -353,7 +396,7 @@
 
             <div class="confirm-item">
                 <p class="confirm-label">地点</p>
-                <p class="confirm-value" id="confirm-place">...</p>
+                <p class="confirm-value"><span id="confirm-place">...</span><br><small id="confirm-station" style="color: var(--text-dim);"></small></p>
             </div>
 
             <div class="confirm-item">
@@ -377,19 +420,10 @@
             </div>
 
             <div class="btn-container">
-                <button class="btn btn-secondary" onclick="changeStep(2)">修正する</button>
-                <button class="btn btn-primary" id="submit-final">記録する</button>
+                <button class="btn btn-secondary" onclick="changeStep(4)">修正する</button>
+                <button class="btn btn-primary" id="submit-final">滞留を記録する</button>
             </div>
         </section>
-
-        <!-- STEP 4: 完了 -->
-        <section id="step-4" class="step">
-            <div class="success-screen">
-                <p class="success-text">記録しました</p>
-                <button class="btn-outline" onclick="location.reload()">続けて採集する</button>
-            </div>
-        </section>
-
     </div>
 
     <!-- Leaflet JS -->
@@ -416,12 +450,17 @@
 
         let selectedLatLng = null;
         let selectedPlaceName = "指定された地点";
+        let selectedStation = "";
         let selectedTimeZone = null;
         let selectedEmotion = null;
         const selectedTags = new Set();
 
         const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([35.0116, 135.7681], 14);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+        
+        // 駅名や地名が最も確実にはっきり見える標準のOpenStreetMapを使用
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
 
         let currentMarker = null;
 
@@ -429,15 +468,32 @@
             setMarker(e.latlng, "指定された地点");
         });
 
-        function setMarker(latlng, name) {
+        async function setMarker(latlng, name) {
             selectedLatLng = latlng;
             selectedPlaceName = name;
+            
+            const stationDisplay = document.getElementById('selected-station-display');
+            const stationNameEl = document.getElementById('station-name-step1');
+            stationDisplay.style.display = 'block';
+            stationNameEl.innerText = "取得中...";
+
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latlng.lat}&lon=${latlng.lng}&zoom=18&addressdetails=1`);
+                const data = await res.json();
+                const addr = data.address;
+                selectedStation = addr.station || addr.railway || addr.suburb || addr.neighbourhood || addr.city_district || "付近の地点";
+                stationNameEl.innerText = `${selectedStation} 付近`;
+            } catch (e) {
+                selectedStation = "指定された地点";
+                stationNameEl.innerText = selectedStation;
+            }
+            
             if (currentMarker) {
                 currentMarker.setLatLng(latlng);
             } else {
                 currentMarker = L.marker(latlng, { draggable: true }).addTo(map);
                 currentMarker.on('dragend', (ev) => {
-                    selectedLatLng = ev.target.getLatLng();
+                    setMarker(ev.target.getLatLng(), "指定された地点");
                 });
             }
             document.getElementById('to-step-2').disabled = false;
@@ -476,7 +532,7 @@
             }, 500);
         });
 
-        document.querySelectorAll('.tag-btn').forEach(btn => {
+        document.querySelectorAll('.tag-btn:not(.emotion-btn)').forEach(btn => {
             btn.onclick = () => {
                 const tag = btn.dataset.tag;
                 if (selectedTags.has(tag)) {
@@ -504,12 +560,10 @@
             };
         });
 
-        // --- 感情選択 (単一選択) ---
         document.querySelectorAll('.emotion-btn').forEach(btn => {
             btn.onclick = () => {
                 const emo = btn.dataset.emo;
                 document.querySelectorAll('.emotion-btn').forEach(b => b.classList.remove('selected'));
-                
                 if (selectedEmotion === emo) {
                     selectedEmotion = null;
                 } else {
@@ -521,15 +575,24 @@
         });
 
         function updateValidation() {
-            document.getElementById('to-step-3').disabled = (selectedTags.size === 0 || !selectedTimeZone || !selectedEmotion);
+            const step2Btn = document.getElementById('to-step-3');
+            if (step2Btn) step2Btn.disabled = !selectedTimeZone;
+
+            const step3Btn = document.getElementById('to-step-4');
+            if (step3Btn) step3Btn.disabled = !selectedEmotion;
+
+            const step4Btn = document.getElementById('to-step-5');
+            if (step4Btn) step4Btn.disabled = (selectedTags.size === 0);
         }
 
         window.changeStep = (num) => {
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
             document.getElementById(`step-${num}`).classList.add('active');
             window.scrollTo(0, 0);
-            if (num === 3) {
+
+            if (num === 5) {
                 document.getElementById('confirm-place').innerText = selectedPlaceName;
+                document.getElementById('confirm-station').innerText = selectedStation ? `📍 ${selectedStation}付近` : "";
                 document.getElementById('confirm-timezone').innerText = selectedTimeZone;
                 document.getElementById('confirm-emotion').innerText = selectedEmotion || '(未選択)';
                 
@@ -547,6 +610,8 @@
 
         document.getElementById('to-step-2').onclick = () => changeStep(2);
         document.getElementById('to-step-3').onclick = () => changeStep(3);
+        document.getElementById('to-step-4').onclick = () => changeStep(4);
+        document.getElementById('to-step-5').onclick = () => changeStep(5);
 
         document.getElementById('submit-final').onclick = async () => {
             const btn = document.getElementById('submit-final');
@@ -557,13 +622,14 @@
                     lat: selectedLatLng.lat,
                     lng: selectedLatLng.lng,
                     placeName: selectedPlaceName,
+                    station: selectedStation,
                     tags: Array.from(selectedTags),
                     timeZone: selectedTimeZone,
                     emotion: selectedEmotion,
                     comment: document.getElementById('comment').value,
                     createdAt: serverTimestamp()
                 });
-                changeStep(4);
+                showSuccess();
             } catch (err) {
                 alert("保存に失敗しました。");
                 btn.disabled = false;
@@ -571,30 +637,27 @@
             }
         };
 
+        function showSuccess() {
+            document.getElementById('success-message').style.display = 'flex';
+            document.getElementById('main-content').style.opacity = '0';
+        }
+
         window.resetUI = () => {
             document.getElementById('success-message').style.display = 'none';
             document.getElementById('main-content').style.opacity = '1';
-            
-            // 状態のリセット
             selectedTags.clear();
             selectedTimeZone = null;
             selectedEmotion = null;
             selectedLatLng = null;
-            
-            // フォームのリセット
+            selectedStation = "";
             document.getElementById('comment').value = '';
-            document.getElementById('lat').value = '';
-            document.getElementById('lng').value = '';
-            
-            // 視覚的状態のリセット
+            document.getElementById('place-search').value = '';
+            document.getElementById('selected-station-display').style.display = 'none';
             document.querySelectorAll('.tag-btn, .timezone-btn, .emotion-btn').forEach(btn => btn.classList.remove('selected'));
             if (currentMarker) map.removeLayer(currentMarker);
             currentMarker = null;
-            
-            // ボタンのリセット
-            document.getElementById('submit-btn').disabled = true;
-            document.getElementById('submit-btn').innerText = "記録を残す";
-            
+            document.getElementById('to-step-2').disabled = true;
+            updateValidation();
             changeStep(1);
         };
     </script>
